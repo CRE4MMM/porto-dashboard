@@ -13,7 +13,7 @@ import {
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid,
+  LabelList,
 } from 'recharts'
 
 const COLORS = [
@@ -90,30 +90,50 @@ function Chart({ title, data }) {
 }
 
 function LotChart({ data }) {
+  const sorted = [...data].sort((a, b) => b.value - a.value)
+
   return (
     <section className="card">
       <h3>Jumlah lot per aset</h3>
 
-      {data.length ? (
+      {sorted.length ? (
         <ResponsiveContainer
           width="100%"
-          height={Math.max(220, data.length * 46)}
+          height={Math.max(200, sorted.length * 52)}
         >
           <BarChart
-            data={data}
+            data={sorted}
             layout="vertical"
-            margin={{ top: 4, right: 24, bottom: 4, left: 8 }}
+            margin={{ top: 4, right: 80, bottom: 4, left: 0 }}
           >
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-            <XAxis type="number" allowDecimals />
-            <YAxis type="category" dataKey="name" width={70} />
+            <XAxis type="number" hide domain={[0, 'dataMax']} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={64}
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontWeight: 600, fontSize: 13 }}
+            />
             <Tooltip
+              cursor={{ fill: 'rgba(0,0,0,0.04)' }}
               formatter={(value) => [`${lotFmt(value)} lot`, 'Jumlah']}
             />
-            <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-              {data.map((item, index) => (
+            <Bar
+              dataKey="value"
+              radius={[0, 8, 8, 0]}
+              maxBarSize={26}
+              background={{ fill: '#f1f5f9', radius: 8 }}
+            >
+              {sorted.map((item, index) => (
                 <Cell key={item.name} fill={COLORS[index % COLORS.length]} />
               ))}
+              <LabelList
+                dataKey="value"
+                position="right"
+                formatter={(value) => `${lotFmt(value)} lot`}
+                style={{ fontSize: 13, fontWeight: 600 }}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -336,7 +356,6 @@ export default function Dashboard() {
   }))
 
   const total = rows.reduce((sum, row) => sum + row.value, 0)
-  const totalLots = rows.reduce((sum, row) => sum + Number(row.lots || 0), 0)
   const assetCount = new Set(rows.map((row) => row.symbol)).size
 
   const options = [
@@ -360,11 +379,6 @@ export default function Dashboard() {
       </header>
 
       <section className="stats">
-        <div className="stat">
-          <span>Total lot</span>
-          <b>{lotFmt(totalLots)}</b>
-        </div>
-
         <div className="stat">
           <span>Jumlah aset</span>
           <b>{assetCount}</b>
