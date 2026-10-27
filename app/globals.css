@@ -534,7 +534,7 @@ td .ghost {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
 
@@ -557,16 +557,49 @@ td .ghost {
 }
 
 .stat b {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
   font-family: var(--display);
   font-size: 1.4rem;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 
+/* Angka tetap satu baris, dipotong "…" kalau terlalu panjang */
+.stat b .num {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: inherit;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Satuan (lot, lembar, gram, coin) kecil dan pudar */
+.stat b .unit {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-family: var(--body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
 .stat small {
   color: var(--muted);
   font-size: 0.76rem;
   font-weight: 500;
+}
+
+/* Rincian per aset: satu baris, dipotong "…" (teks penuh lewat hover) */
+.stat small.detail {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stat.rate div {
@@ -726,6 +759,11 @@ td .ghost {
   .grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
   }
 
   .card,
