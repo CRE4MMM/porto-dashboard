@@ -19,16 +19,15 @@ model User {
 }
 
 model Investment {
-  id           Int      @id @default(autoincrement())
-  userId       Int
-  symbol       String
-  category     String
-  currency     String   @default("IDR")
-  quantity     Decimal  @db.Decimal(24, 8)
-  buyPrice     Decimal  @db.Decimal(24, 6)
-  currentPrice Decimal  @db.Decimal(24, 6)
-  createdAt    DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  symbol    String
+  category  String
+  currency  String   @default("IDR")
+  lots      Decimal  @db.Decimal(24, 8)
+  amount    Decimal  @db.Decimal(24, 2)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }

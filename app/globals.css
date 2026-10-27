@@ -453,7 +453,7 @@ button.x:hover {
 
 .card table {
   width: 100%;
-  min-width: 980px;
+  min-width: 760px;
   border-collapse: separate;
   border-spacing: 0;
   text-align: left;
@@ -529,7 +529,7 @@ td .ghost {
 }
 
 /* ========================================
-   8b. RINGKASAN UNTUNG / RUGI
+   8b. RINGKASAN (LOT, ASET, KURS)
 ======================================== */
 
 .stats {
@@ -561,6 +561,12 @@ td .ghost {
   font-size: 1.4rem;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
+}
+
+.stat small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 500;
 }
 
 .stat.rate div {
@@ -788,7 +794,7 @@ td .ghost {
   }
 
   .card table {
-    min-width: 980px;
+    min-width: 760px;
   }
 
   .chips {
