@@ -9,11 +9,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  LabelList,
 } from 'recharts'
 
 const COLORS = [
@@ -84,61 +79,6 @@ function Chart({ title, data }) {
         <p className="muted empty">
           Belum ada data. Tambahkan investasi pertama Anda.
         </p>
-      )}
-    </section>
-  )
-}
-
-function LotChart({ data }) {
-  const sorted = [...data].sort((a, b) => b.value - a.value)
-
-  return (
-    <section className="card">
-      <h3>Jumlah lot per aset</h3>
-
-      {sorted.length ? (
-        <ResponsiveContainer
-          width="100%"
-          height={Math.max(200, sorted.length * 52)}
-        >
-          <BarChart
-            data={sorted}
-            layout="vertical"
-            margin={{ top: 4, right: 80, bottom: 4, left: 0 }}
-          >
-            <XAxis type="number" hide domain={[0, 'dataMax']} />
-            <YAxis
-              type="category"
-              dataKey="name"
-              width={64}
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontWeight: 600, fontSize: 13 }}
-            />
-            <Tooltip
-              cursor={{ fill: 'rgba(0,0,0,0.04)' }}
-              formatter={(value) => [`${lotFmt(value)} lot`, 'Jumlah']}
-            />
-            <Bar
-              dataKey="value"
-              radius={[0, 8, 8, 0]}
-              maxBarSize={26}
-              background={{ fill: '#f1f5f9', radius: 8 }}
-            >
-              {sorted.map((item, index) => (
-                <Cell key={item.name} fill={COLORS[index % COLORS.length]} />
-              ))}
-              <LabelList
-                dataKey="value"
-                position="right"
-                formatter={(value) => `${lotFmt(value)} lot`}
-                style={{ fontSize: 13, fontWeight: 600 }}
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      ) : (
-        <p className="muted empty">Belum ada data lot.</p>
       )}
     </section>
   )
@@ -402,8 +342,6 @@ export default function Dashboard() {
 
         <Chart title="Berdasarkan kategori" data={group(rows, 'category')} />
       </div>
-
-      <LotChart data={group(rows, 'symbol', 'lots')} />
 
       <section className="card">
         <h3>{editId ? 'Edit investasi' : 'Tambah investasi'}</h3>
