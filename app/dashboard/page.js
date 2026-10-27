@@ -33,6 +33,11 @@ const money = (n, currency) =>
       Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
     : rp(n)
 
+// Saham Indonesia = mata uang IDR dan nama kategori mengandung "saham".
+// Ubah aturan ini kalau nama kategori Anda berbeda.
+const isIdStock = (row) =>
+  row.currency === 'IDR' && /saham/i.test(row.category || '')
+
 const group = (list, key, field = 'value') =>
   Object.entries(
     list.reduce((acc, item) => {
@@ -298,6 +303,9 @@ export default function Dashboard() {
   const total = rows.reduce((sum, row) => sum + row.value, 0)
   const assetCount = new Set(rows.map((row) => row.symbol)).size
 
+  const idStocks = group(rows.filter(isIdStock), 'symbol', 'lots')
+  const idStockLots = idStocks.reduce((sum, item) => sum + item.value, 0)
+
   const options = [
     ...new Set([
       ...cats.map((category) => category.name),
@@ -322,6 +330,18 @@ export default function Dashboard() {
         <div className="stat">
           <span>Jumlah aset</span>
           <b>{assetCount}</b>
+        </div>
+
+        <div className="stat">
+          <span>Lot saham ID</span>
+          <b>{lotFmt(idStockLots)}</b>
+          <small>
+            {idStocks.length
+              ? idStocks
+                  .map((item) => `${item.name} ${lotFmt(item.value)}`)
+                  .join(' · ')
+              : 'Belum ada saham ID'}
+          </small>
         </div>
 
         <div className="stat">
