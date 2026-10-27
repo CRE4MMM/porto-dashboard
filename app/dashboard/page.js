@@ -101,6 +101,73 @@ function Chart({ title, data }) {
   )
 }
 
+function ConfirmDialog({ dialog, onClose }) {
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!dialog) return
+
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !busy) onClose()
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [dialog, busy, onClose])
+
+  if (!dialog) return null
+
+  async function run() {
+    setBusy(true)
+
+    try {
+      await dialog.onConfirm()
+    } finally {
+      setBusy(false)
+      onClose()
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+      <div
+        className="modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-desc"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id="confirm-title">{dialog.title}</h3>
+        <p id="confirm-desc" className="muted">
+          {dialog.message}
+        </p>
+
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="ghost"
+            autoFocus
+            onClick={onClose}
+            disabled={busy}
+          >
+            Batal
+          </button>
+
+          <button
+            type="button"
+            className={dialog.danger ? 'danger-solid' : ''}
+            onClick={run}
+            disabled={busy}
+          >
+            {busy ? 'Memproses...' : dialog.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const empty = {
   symbol: '',
   category: '',
@@ -124,6 +191,7 @@ export default function Dashboard() {
   const [catErr, setCatErr] = useState('')
   const [showCatForm, setShowCatForm] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [dialog, setDialog] = useState(null)
 
   async function load() {
     try {
@@ -193,9 +261,17 @@ export default function Dashboard() {
     }
   }
 
-  async function del(id) {
-    if (!confirm('Hapus investasi ini?')) return
+  function del(investment) {
+    setDialog({
+      title: 'Hapus investasi?',
+      message: `Investasi ${investment.symbol} akan dihapus permanen dan tidak bisa dikembalikan.`,
+      confirmLabel: 'Hapus',
+      danger: true,
+      onConfirm: () => doDelete(investment.id),
+    })
+  }
 
+  async function doDelete(id) {
     setErr('')
 
     try {
@@ -246,9 +322,17 @@ export default function Dashboard() {
     }
   }
 
-  async function delCat(category) {
-    if (!confirm(`Hapus kategori "${category.name}"?`)) return
+  function delCat(category) {
+    setDialog({
+      title: 'Hapus kategori?',
+      message: `Kategori "${category.name}" akan dihapus.`,
+      confirmLabel: 'Hapus',
+      danger: true,
+      onConfirm: () => doDeleteCat(category),
+    })
+  }
 
+  async function doDeleteCat(category) {
     setCatErr('')
 
     try {
@@ -275,7 +359,17 @@ export default function Dashboard() {
     }
   }
 
-  async function logout() {
+  function logout() {
+    setDialog({
+      title: 'Keluar dari akun?',
+      message: 'Anda perlu masuk lagi untuk melihat portofolio.',
+      confirmLabel: 'Keluar',
+      danger: false,
+      onConfirm: doLogout,
+    })
+  }
+
+  async function doLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/login')
     router.refresh()
@@ -355,9 +449,15 @@ export default function Dashboard() {
           <div className="stat" key={h.category}>
             <span>{h.label}</span>
             <b>
-              {lotFmt(h.sum)} {h.unit}
+              <span className="num">{lotFmt(h.sum)}</span>
+              <span className="unit">{h.unit}</span>
             </b>
-            <small>
+            <small
+              className="detail"
+              title={h.items
+                .map((item) => `${item.name} ${lotFmt(item.value)}`)
+                .join(', ')}
+            >
               {h.items.length
                 ? h.items
                     .map((item) => `${item.name} ${lotFmt(item.value)}`)
@@ -566,10 +666,7 @@ export default function Dashboard() {
                     <button className="ghost" onClick={() => startEdit(row)}>
                       Edit
                     </button>{' '}
-                    <button
-                      className="ghost danger"
-                      onClick={() => del(row.id)}
-                    >
+                    <button className="ghost danger" onClick={() => del(row)}>
                       Hapus
                     </button>
                   </td>
@@ -587,6 +684,8 @@ export default function Dashboard() {
           </table>
         )}
       </section>
+
+      <ConfirmDialog dialog={dialog} onClose={() => setDialog(null)} />
     </main>
   )
 }

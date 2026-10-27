@@ -628,6 +628,72 @@ td .ghost {
 }
 
 /* ========================================
+   8c. DIALOG KONFIRMASI
+======================================== */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  padding: 1rem;
+  place-items: center;
+  background: rgb(20 34 56 / 45%);
+  backdrop-filter: blur(2px);
+  animation: modal-fade 0.15s ease;
+}
+
+.modal {
+  width: 100%;
+  max-width: 400px;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: modal-pop 0.18s ease;
+}
+
+.modal h3 {
+  margin-bottom: 0.5rem;
+}
+
+.modal p {
+  margin-bottom: 1.25rem;
+  font-size: 0.92rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+button.danger-solid {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+button.danger-solid:hover {
+  border-color: #912018;
+  background: #912018;
+}
+
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+/* ========================================
    9. CHARTS
 ======================================== */
 
