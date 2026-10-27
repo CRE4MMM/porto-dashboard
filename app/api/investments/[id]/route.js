@@ -1,20 +1,17 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserId } from '@/lib/auth'
+import { parse } from '@/lib/investment'
 
 export async function PUT(req, { params }) {
   const uid = await getUserId()
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { symbol, category, amount } = await req.json()
-  if (!symbol?.trim() || !category?.trim() || !(Number(amount) > 0))
+  const d = parse(await req.json())
+  if (!d)
     return NextResponse.json({ error: 'Data tidak valid' }, { status: 400 })
   const r = await prisma.investment.updateMany({
     where: { id: Number(params.id), userId: uid },
-    data: {
-      symbol: symbol.trim().toUpperCase(),
-      category: category.trim(),
-      amount: Number(amount),
-    },
+    data: d,
   })
   return r.count
     ? NextResponse.json({ ok: true })

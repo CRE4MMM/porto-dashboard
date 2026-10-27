@@ -22,13 +22,27 @@ const COLORS = [
   '#475569',
 ]
 
-const rp = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID')
+const rp = (n) =>
+  (n < 0 ? '-' : '') +
+  'Rp ' +
+  Math.abs(Math.round(Number(n || 0))).toLocaleString('id-ID')
+
+const signed = (n) => (n > 0 ? '+' + rp(n) : rp(n))
+
+const pct = (p) => (p > 0 ? '+' : '') + p.toFixed(2) + '%'
+
+const price = (n, currency) =>
+  currency === 'USD'
+    ? 'US$ ' +
+      Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 4 })
+    : 'Rp ' +
+      Number(n || 0).toLocaleString('id-ID', { maximumFractionDigits: 4 })
 
 const group = (list, key) =>
   Object.entries(
     list.reduce((acc, item) => {
       const name = item[key]
-      acc[name] = (acc[name] || 0) + Number(item.amount || 0)
+      acc[name] = (acc[name] || 0) + Number(item.value || 0)
       return acc
     }, {})
   ).map(([name, value]) => ({ name, value }))
@@ -78,7 +92,10 @@ function Chart({ title, data }) {
 const empty = {
   symbol: '',
   category: '',
-  amount: '',
+  currency: 'IDR',
+  quantity: '',
+  buyPrice: '',
+  currentPrice: '',
 }
 
 export default function Dashboard() {
@@ -86,6 +103,8 @@ export default function Dashboard() {
 
   const [list, setList] = useState([])
   const [cats, setCats] = useState([])
+  const [rate, setRate] = useState(16000)
+  const [rateInput, setRateInput] = useState('16000')
   const [form, setForm] = useState(empty)
   const [editId, setEditId] = useState(null)
 
@@ -97,10 +116,12 @@ export default function Dashboard() {
 
   async function load() {
     try {
-      const [investmentsResponse, categoriesResponse] = await Promise.all([
-        fetch('/api/investments'),
-        fetch('/api/categories'),
-      ])
+      const [investmentsResponse, categoriesResponse, settingsResponse] =
+        await Promise.all([
+          fetch('/api/investments'),
+          fetch('/api/categories'),
+          fetch('/api/settings'),
+        ])
 
       if (
         investmentsResponse.status === 401 ||
@@ -119,6 +140,12 @@ export default function Dashboard() {
 
       setList(investments)
       setCats(categories)
+
+      if (settingsResponse.ok) {
+        const settings = await settingsResponse.json()
+        setRate(Number(settings.usdRate))
+        setRateInput(String(settings.usdRate))
+      }
     } catch (error) {
       console.error('Dashboard load error:', error)
       setErr('Gagal memuat data. Silakan coba lagi.')
@@ -139,10 +166,7 @@ export default function Dashboard() {
       const response = await send(
         editId ? `/api/investments/${editId}` : '/api/investments',
         editId ? 'PUT' : 'POST',
-        {
-          ...form,
-          amount: Number(form.amount),
-        }
+        form
       )
 
       const data = await response.json()
@@ -182,6 +206,27 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Delete investment error:', error)
       setErr('Terjadi kesalahan saat menghapus investasi.')
+    }
+  }
+
+  async function saveRate(e) {
+    e.preventDefault()
+    setErr('')
+
+    try {
+      const response = await send('/api/settings', 'PUT', {
+        usdRate: rateInput,
+      })
+
+      if (!response.ok) {
+        setErr('Kurs tidak valid.')
+        return
+      }
+
+      setRate(Number(rateInput))
+    } catch (error) {
+      console.error('Save rate error:', error)
+      setErr('Terjadi kesalahan saat menyimpan kurs.')
     }
   }
 
@@ -257,7 +302,10 @@ export default function Dashboard() {
     setForm({
       symbol: investment.symbol,
       category: investment.category,
-      amount: String(investment.amount),
+      currency: investment.currency || 'IDR',
+      quantity: String(investment.quantity),
+      buyPrice: String(investment.buyPrice),
+      currentPrice: String(investment.currentPrice),
     })
 
     window.scrollTo({
@@ -272,10 +320,29 @@ export default function Dashboard() {
     setErr('')
   }
 
-  const total = list.reduce(
-    (sum, investment) => sum + Number(investment.amount || 0),
-    0
-  )
+  const setField = (key) => (e) => setForm({ ...form, [key]: e.target.value })
+
+  const rows = list.map((investment) => {
+    const fx = investment.currency === 'USD' ? rate : 1
+    const value =
+      Number(investment.quantity || 0) *
+      Number(investment.currentPrice || 0) *
+      fx
+    const cost =
+      Number(investment.quantity || 0) * Number(investment.buyPrice || 0) * fx
+
+    return {
+      ...investment,
+      value,
+      cost,
+      pl: value - cost,
+      pct: cost ? ((value - cost) / cost) * 100 : 0,
+    }
+  })
+
+  const total = rows.reduce((sum, row) => sum + row.value, 0)
+  const modal = rows.reduce((sum, row) => sum + row.cost, 0)
+  const pl = total - modal
 
   const options = [
     ...new Set([
@@ -297,10 +364,46 @@ export default function Dashboard() {
         </button>
       </header>
 
-      <div className="grid">
-        <Chart title="Berdasarkan aset" data={group(list, 'symbol')} />
+      <section className="stats">
+        <div className="stat">
+          <span>Modal</span>
+          <b>{rp(modal)}</b>
+        </div>
 
-        <Chart title="Berdasarkan kategori" data={group(list, 'category')} />
+        <div className={'stat ' + (pl >= 0 ? 'pos' : 'neg')}>
+          <span>Untung / rugi</span>
+          <b>{signed(pl)}</b>
+        </div>
+
+        <div className={'stat ' + (pl >= 0 ? 'pos' : 'neg')}>
+          <span>Return</span>
+          <b>{pct(modal ? (pl / modal) * 100 : 0)}</b>
+        </div>
+
+        <form onSubmit={saveRate} className="stat rate">
+          <span>Kurs USD/IDR</span>
+
+          <div>
+            <input
+              type="number"
+              min="1"
+              step="any"
+              value={rateInput}
+              onChange={(e) => setRateInput(e.target.value)}
+              required
+            />
+
+            <button type="submit" className="ghost">
+              Simpan
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <div className="grid">
+        <Chart title="Berdasarkan aset" data={group(rows, 'symbol')} />
+
+        <Chart title="Berdasarkan kategori" data={group(rows, 'category')} />
       </div>
 
       <section className="card">
@@ -310,13 +413,13 @@ export default function Dashboard() {
           <input
             placeholder="Aset (VOO, BBCA, BTC)"
             value={form.symbol}
-            onChange={(e) => setForm({ ...form, symbol: e.target.value })}
+            onChange={setField('symbol')}
             required
           />
 
           <select
             value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            onChange={setField('category')}
             required
           >
             <option value="">Pilih kategori</option>
@@ -339,13 +442,38 @@ export default function Dashboard() {
             {showCatForm ? 'Tutup kategori' : '+ Kategori'}
           </button>
 
+          <select value={form.currency} onChange={setField('currency')}>
+            <option value="IDR">IDR (Rp)</option>
+            <option value="USD">USD (US$)</option>
+          </select>
+
           <input
             type="number"
-            min="1"
+            min="0"
             step="any"
-            placeholder="Nilai (Rp)"
-            value={form.amount}
-            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            placeholder="Jumlah unit"
+            value={form.quantity}
+            onChange={setField('quantity')}
+            required
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="any"
+            placeholder="Harga beli / unit"
+            value={form.buyPrice}
+            onChange={setField('buyPrice')}
+            required
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="any"
+            placeholder="Harga sekarang / unit"
+            value={form.currentPrice}
+            onChange={setField('currentPrice')}
             required
           />
 
@@ -425,53 +553,65 @@ export default function Dashboard() {
               <tr>
                 <th>Aset</th>
                 <th>Kategori</th>
+                <th className="r">Unit</th>
+                <th className="r">Harga beli</th>
+                <th className="r">Harga kini</th>
                 <th className="r">Nilai</th>
                 <th className="r">Porsi</th>
+                <th className="r">Untung / rugi</th>
                 <th>Aksi</th>
               </tr>
             </thead>
 
             <tbody>
-              {list.map((investment) => {
-                const amount = Number(investment.amount || 0)
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <b>{row.symbol}</b>
+                  </td>
 
-                return (
-                  <tr key={investment.id}>
-                    <td>
-                      <b>{investment.symbol}</b>
-                    </td>
+                  <td>
+                    <span className="pill">{row.category}</span>
+                  </td>
 
-                    <td>
-                      <span className="pill">{investment.category}</span>
-                    </td>
+                  <td className="r">
+                    {Number(row.quantity).toLocaleString('id-ID', {
+                      maximumFractionDigits: 8,
+                    })}
+                  </td>
 
-                    <td className="r">{rp(amount)}</td>
+                  <td className="r">{price(row.buyPrice, row.currency)}</td>
 
-                    <td className="r muted">
-                      {total ? ((amount / total) * 100).toFixed(1) : '0.0'}%
-                    </td>
+                  <td className="r">{price(row.currentPrice, row.currency)}</td>
 
-                    <td className="r">
-                      <button
-                        className="ghost"
-                        onClick={() => startEdit(investment)}
-                      >
-                        Edit
-                      </button>{' '}
-                      <button
-                        className="ghost danger"
-                        onClick={() => del(investment.id)}
-                      >
-                        Hapus
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
+                  <td className="r">{rp(row.value)}</td>
 
-              {!list.length && (
+                  <td className="r muted">
+                    {total ? ((row.value / total) * 100).toFixed(1) : '0.0'}%
+                  </td>
+
+                  <td className={'r ' + (row.pl >= 0 ? 'pos' : 'neg')}>
+                    {signed(row.pl)}
+                    <small className="sub">{pct(row.pct)}</small>
+                  </td>
+
+                  <td className="r">
+                    <button className="ghost" onClick={() => startEdit(row)}>
+                      Edit
+                    </button>{' '}
+                    <button
+                      className="ghost danger"
+                      onClick={() => del(row.id)}
+                    >
+                      Hapus
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {!rows.length && (
                 <tr>
-                  <td colSpan="5" className="muted">
+                  <td colSpan="9" className="muted">
                     Belum ada investasi.
                   </td>
                 </tr>
