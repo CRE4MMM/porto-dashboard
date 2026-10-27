@@ -33,9 +33,22 @@ const money = (n, currency) =>
       Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
     : rp(n)
 
-// Saham Indonesia = kategori "ID Stocks" (huruf besar/kecil tidak berpengaruh).
-// Ubah aturan ini kalau nama kategori Anda berbeda.
-const isIdStock = (row) => /^id\s*stocks?$/i.test((row.category || '').trim())
+// Kartu jumlah per kategori. `category` harus sama dengan nama kategori di
+// aplikasi (huruf besar/kecil tidak berpengaruh). Ubah/tambah sesuai kebutuhan.
+const HOLDINGS = [
+  { label: 'Saham ID', category: 'ID Stocks', unit: 'lot' },
+  { label: 'US ETF', category: 'US ETF', unit: 'lembar' },
+  { label: 'Emas', category: 'GOLD', unit: 'gram' },
+  { label: 'Crypto', category: 'CRYPTO', unit: 'coin' },
+]
+
+const norm = (s) =>
+  String(s || '')
+    .trim()
+    .toLowerCase()
+
+const unitOf = (category) =>
+  HOLDINGS.find((h) => norm(h.category) === norm(category))?.unit || ''
 
 const group = (list, key, field = 'value') =>
   Object.entries(
@@ -302,8 +315,15 @@ export default function Dashboard() {
   const total = rows.reduce((sum, row) => sum + row.value, 0)
   const assetCount = new Set(rows.map((row) => row.symbol)).size
 
-  const idStocks = group(rows.filter(isIdStock), 'symbol', 'lots')
-  const idStockLots = idStocks.reduce((sum, item) => sum + item.value, 0)
+  const holdings = HOLDINGS.map((cfg) => {
+    const items = group(
+      rows.filter((row) => norm(row.category) === norm(cfg.category)),
+      'symbol',
+      'lots'
+    )
+    const sum = items.reduce((acc, item) => acc + item.value, 0)
+    return { ...cfg, items, sum }
+  })
 
   const options = [
     ...new Set([
@@ -331,17 +351,21 @@ export default function Dashboard() {
           <b>{assetCount}</b>
         </div>
 
-        <div className="stat">
-          <span>Lot saham ID</span>
-          <b>{lotFmt(idStockLots)}</b>
-          <small>
-            {idStocks.length
-              ? idStocks
-                  .map((item) => `${item.name} ${lotFmt(item.value)}`)
-                  .join(' · ')
-              : 'Belum ada saham ID'}
-          </small>
-        </div>
+        {holdings.map((h) => (
+          <div className="stat" key={h.category}>
+            <span>{h.label}</span>
+            <b>
+              {lotFmt(h.sum)} {h.unit}
+            </b>
+            <small>
+              {h.items.length
+                ? h.items
+                    .map((item) => `${item.name} ${lotFmt(item.value)}`)
+                    .join(' · ')
+                : 'Belum ada'}
+            </small>
+          </div>
+        ))}
 
         <div className="stat">
           <span>Kurs USD/IDR</span>
@@ -407,7 +431,11 @@ export default function Dashboard() {
             type="number"
             min="0"
             step="any"
-            placeholder="Jumlah lot"
+            placeholder={
+              unitOf(form.category)
+                ? `Jumlah (${unitOf(form.category)})`
+                : 'Jumlah'
+            }
             value={form.lots}
             onChange={setField('lots')}
             required
@@ -499,10 +527,9 @@ export default function Dashboard() {
               <tr>
                 <th>Aset</th>
                 <th>Kategori</th>
-                <th className="r">Lot</th>
+                <th className="r">Jumlah</th>
                 <th className="r">Nilai</th>
                 <th className="r">Porsi</th>
-                <th>Aksi</th>
               </tr>
             </thead>
 
@@ -517,7 +544,12 @@ export default function Dashboard() {
                     <span className="pill">{row.category}</span>
                   </td>
 
-                  <td className="r">{lotFmt(row.lots)}</td>
+                  <td className="r">
+                    {lotFmt(row.lots)}
+                    {unitOf(row.category) && (
+                      <small className="sub">{unitOf(row.category)}</small>
+                    )}
+                  </td>
 
                   <td className="r">
                     {money(row.amount, row.currency)}
