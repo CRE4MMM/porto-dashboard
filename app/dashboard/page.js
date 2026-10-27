@@ -33,10 +33,9 @@ const money = (n, currency) =>
       Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
     : rp(n)
 
-// Saham Indonesia = mata uang IDR dan nama kategori mengandung "saham".
+// Saham Indonesia = kategori "ID Stocks" (huruf besar/kecil tidak berpengaruh).
 // Ubah aturan ini kalau nama kategori Anda berbeda.
-const isIdStock = (row) =>
-  row.currency === 'IDR' && /saham/i.test(row.category || '')
+const isIdStock = (row) => /^id\s*stocks?$/i.test((row.category || '').trim())
 
 const group = (list, key, field = 'value') =>
   Object.entries(
