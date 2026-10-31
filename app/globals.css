@@ -453,7 +453,7 @@ button.x:hover {
 
 .card table {
   width: 100%;
-  min-width: 760px;
+  min-width: 1080px;
   border-collapse: separate;
   border-spacing: 0;
   text-align: left;
@@ -625,6 +625,304 @@ td .ghost {
   font-size: 0.76rem;
   font-weight: 600;
   opacity: 0.75;
+}
+
+/* ========================================
+   8d. HARGA & PNL
+======================================== */
+
+.header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+a.btn-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+a.btn-link:hover {
+  border-color: var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* Tombol pilihan (rentang waktu, mingguan/bulanan) */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-family: var(--body);
+}
+
+.seg button {
+  min-height: 32px;
+  padding: 0.3rem 0.85rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.seg button:hover {
+  border: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.seg button.on,
+.seg button.on:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.toolbar-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* Kartu chart: judul + ringkasan kalimat di kiri, legenda dan tombol tabel di kanan */
+.chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1.25rem;
+  margin-bottom: 1.1rem;
+}
+
+.chart-head h3 {
+  margin-bottom: 0.25rem;
+}
+
+.chart-sub {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.chart-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.1rem;
+  font-size: 0.82rem;
+}
+
+/* Saat data dimuat ulang, grafik lama tetap tampil (agak pudar), tanpa skeleton */
+.chart-body {
+  min-width: 0;
+  transition: opacity 0.2s ease;
+}
+
+.chart-body.dim {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.chart-empty {
+  display: grid;
+  min-height: 220px;
+  padding: 1rem;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Legenda dan kunci seri */
+.keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.95rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.keys li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.key {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.key.line {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.key.rect {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* Tooltip: nilai tebal di depan, nama seri kecil di belakang */
+.tip {
+  min-width: 190px;
+  max-width: 300px;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.tip-title {
+  margin-bottom: 0.4rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.tip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+}
+
+.tip-val {
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.tip-name {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.tip-note {
+  margin-top: 0.45rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* Tabel pendamping grafik */
+.table-scroll {
+  max-height: 340px;
+  margin-top: 0.25rem;
+  overflow: auto;
+}
+
+.table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+
+.chart-card .table-scroll {
+  margin-top: 1.25rem;
+}
+
+.chart-body .table-scroll {
+  margin-top: 0;
+}
+
+.card table.pnl-table {
+  min-width: 480px;
+}
+
+.pnl {
+  margin: 0.4rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.price-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--body);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.price-edit {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.price-edit input {
+  flex: none;
+  width: 120px;
+  min-height: 36px;
+  padding: 0.4rem 0.6rem;
+}
+
+button.link {
+  display: inline;
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+button.link:hover {
+  border: 0;
+  background: transparent;
+  color: var(--accent-dark);
+}
+
+.note {
+  margin: 0.9rem 0 0;
+  font-size: 0.8rem;
 }
 
 /* ========================================
@@ -898,7 +1196,7 @@ button.danger-solid:hover {
   }
 
   .card table {
-    min-width: 760px;
+    min-width: 1080px;
   }
 
   .chips {

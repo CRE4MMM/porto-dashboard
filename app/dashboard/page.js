@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   PieChart,
   Pie,
@@ -10,6 +11,21 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
+import {
+  rp,
+  lotFmt,
+  money,
+  HOLDINGS,
+  norm,
+  cfgOf,
+  unitOf,
+  symKey,
+  priceFmt,
+  signed,
+  pctFmt,
+  tone,
+  buildRows,
+} from '../../lib/portfolio'
 
 const COLORS = [
   '#0c6b61',
@@ -21,34 +37,6 @@ const COLORS = [
   '#a21caf',
   '#475569',
 ]
-
-const rp = (n) => 'Rp ' + Math.round(Number(n || 0)).toLocaleString('id-ID')
-
-const lotFmt = (n) =>
-  Number(n || 0).toLocaleString('id-ID', { maximumFractionDigits: 8 })
-
-const money = (n, currency) =>
-  currency === 'USD'
-    ? 'US$ ' +
-      Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
-    : rp(n)
-
-// Kartu jumlah per kategori. `category` harus sama dengan nama kategori di
-// aplikasi (huruf besar/kecil tidak berpengaruh). Ubah/tambah sesuai kebutuhan.
-const HOLDINGS = [
-  { label: 'Saham ID', category: 'ID Stocks', unit: 'lot' },
-  { label: 'US ETF', category: 'US ETF', unit: 'lembar' },
-  { label: 'Emas', category: 'GOLD', unit: 'gram' },
-  { label: 'Crypto', category: 'CRYPTO', unit: 'coin' },
-]
-
-const norm = (s) =>
-  String(s || '')
-    .trim()
-    .toLowerCase()
-
-const unitOf = (category) =>
-  HOLDINGS.find((h) => norm(h.category) === norm(category))?.unit || ''
 
 const group = (list, key, field = 'value') =>
   Object.entries(
@@ -193,6 +181,17 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [dialog, setDialog] = useState(null)
 
+  const [prices, setPrices] = useState({})
+  const [priceInfo, setPriceInfo] = useState({
+    loading: false,
+    at: null,
+    errors: {},
+    failed: false,
+  })
+  const [manual, setManual] = useState({})
+  const [priceEditId, setPriceEditId] = useState(null)
+  const [priceEditVal, setPriceEditVal] = useState('')
+
   async function load() {
     try {
       const [investmentsResponse, categoriesResponse, rateResponse] =
@@ -233,6 +232,80 @@ export default function Dashboard() {
   useEffect(() => {
     load()
   }, [])
+
+  // Harga manual disimpan di browser ini (localStorage).
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('manualPrices') || '{}')
+      if (saved && typeof saved === 'object') setManual(saved)
+    } catch {}
+  }, [])
+
+  function persistManual(next) {
+    setManual(next)
+
+    try {
+      localStorage.setItem('manualPrices', JSON.stringify(next))
+    } catch {}
+  }
+
+  // Daftar aset yang punya sumber harga otomatis, misalnya "idx:BBCA,us:VOO".
+  const priceKey = [
+    ...new Set(
+      list
+        .map((investment) => {
+          const cfg = cfgOf(investment.category)
+          return cfg ? `${cfg.source}:${symKey(investment.symbol)}` : null
+        })
+        .filter(Boolean)
+    ),
+  ]
+    .sort()
+    .join(',')
+
+  async function loadPrices() {
+    if (!priceKey) {
+      setPrices({})
+      return
+    }
+
+    setPriceInfo((previous) => ({ ...previous, loading: true }))
+
+    try {
+      const items = priceKey.split(',').map((entry) => {
+        const index = entry.indexOf(':')
+        return { source: entry.slice(0, index), symbol: entry.slice(index + 1) }
+      })
+
+      const response = await send('/api/prices', 'POST', { items })
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      const data = await response.json()
+
+      setPrices((previous) => ({ ...previous, ...(data.prices || {}) }))
+      setPriceInfo({
+        loading: false,
+        at: new Date(),
+        errors: data.errors || {},
+        failed: false,
+      })
+    } catch (error) {
+      console.error('Price load error:', error)
+      setPriceInfo((previous) => ({
+        ...previous,
+        loading: false,
+        failed: true,
+      }))
+    }
+  }
+
+  useEffect(() => {
+    loadPrices()
+
+    const timer = setInterval(loadPrices, 5 * 60 * 1000)
+    return () => clearInterval(timer)
+  }, [priceKey])
 
   async function save(e) {
     e.preventDefault()
@@ -399,14 +472,44 @@ export default function Dashboard() {
 
   const setField = (key) => (e) => setForm({ ...form, [key]: e.target.value })
 
-  const rows = list.map((investment) => ({
-    ...investment,
-    value:
-      Number(investment.amount || 0) *
-      (investment.currency === 'USD' ? rate : 1),
-  }))
+  const rows = buildRows({ list, rate, prices, manual })
 
   const total = rows.reduce((sum, row) => sum + row.value, 0)
+  const totalCost = rows.reduce((sum, row) => sum + row.cost, 0)
+  const priced = rows.filter((row) => row.market !== null)
+  const pnlTotal = priced.reduce((sum, row) => sum + row.pnl, 0)
+  const pricedCost = priced.reduce((sum, row) => sum + row.cost, 0)
+  const pnlTotalPct = pricedCost > 0 ? (pnlTotal / pricedCost) * 100 : null
+  const unpriced = rows.length - priced.length
+
+  function startPrice(row) {
+    const current = manual[symKey(row.symbol)]
+
+    setPriceEditId(row.id)
+    setPriceEditVal(current ? String(current.price) : '')
+  }
+
+  function savePrice(row) {
+    const key = symKey(row.symbol)
+    const next = { ...manual }
+    const text = priceEditVal.trim()
+    const value = Number(text)
+
+    if (!text) {
+      delete next[key]
+    } else if (Number.isFinite(value) && value > 0) {
+      next[key] = {
+        price: value,
+        currency:
+          row.price?.currency || cfgOf(row.category)?.priceCurrency || 'IDR',
+      }
+    } else {
+      return
+    }
+
+    persistManual(next)
+    setPriceEditId(null)
+  }
   const assetCount = new Set(rows.map((row) => row.symbol)).size
 
   const holdings = HOLDINGS.map((cfg) => {
@@ -432,11 +535,33 @@ export default function Dashboard() {
         <div>
           <h1>Total portofolio</h1>
           <p className="total">{rp(total)}</p>
+
+          {priced.length > 0 && (
+            <p className="pnl">
+              <span className={tone(pnlTotal)}>
+                PnL {signed(pnlTotal)}
+                {pnlTotalPct !== null && ` (${pctFmt(pnlTotalPct)})`}
+              </span>
+              <span className="muted"> · Modal {rp(totalCost)}</span>
+              {unpriced > 0 && (
+                <span className="muted">
+                  {' '}
+                  · {unpriced} aset belum ada harga
+                </span>
+              )}
+            </p>
+          )}
         </div>
 
-        <button className="ghost" onClick={logout}>
-          Keluar
-        </button>
+        <div className="header-actions">
+          <Link href="/pnl" className="btn-link">
+            PnL
+          </Link>
+
+          <button className="ghost" onClick={logout}>
+            Keluar
+          </button>
+        </div>
       </header>
 
       <section className="stats">
@@ -617,7 +742,29 @@ export default function Dashboard() {
       </section>
 
       <section className="card">
-        <h3>Daftar investasi</h3>
+        <h3>
+          Daftar investasi
+          <span className="price-meta">
+            {priceInfo.at && (
+              <small className="muted">
+                Harga{' '}
+                {priceInfo.at.toLocaleTimeString('id-ID', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </small>
+            )}
+
+            <button
+              type="button"
+              className="ghost"
+              onClick={loadPrices}
+              disabled={priceInfo.loading}
+            >
+              {priceInfo.loading ? 'Memuat...' : 'Perbarui harga'}
+            </button>
+          </span>
+        </h3>
 
         {loading ? (
           <p className="muted">Memuat data...</p>
@@ -628,8 +775,12 @@ export default function Dashboard() {
                 <th>Aset</th>
                 <th>Kategori</th>
                 <th className="r">Jumlah</th>
+                <th className="r">Modal</th>
+                <th className="r">Harga</th>
                 <th className="r">Nilai</th>
+                <th className="r">PnL</th>
                 <th className="r">Porsi</th>
+                <th>Aksi</th>
               </tr>
             </thead>
 
@@ -654,7 +805,88 @@ export default function Dashboard() {
                   <td className="r">
                     {money(row.amount, row.currency)}
                     {row.currency === 'USD' && (
-                      <small className="sub">≈ {rp(row.value)}</small>
+                      <small className="sub">≈ {rp(row.cost)}</small>
+                    )}
+                  </td>
+
+                  <td className="r">
+                    {priceEditId === row.id ? (
+                      <div className="price-edit">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          autoFocus
+                          value={priceEditVal}
+                          placeholder={`Harga ${
+                            row.price?.currency ||
+                            cfgOf(row.category)?.priceCurrency ||
+                            'IDR'
+                          }`}
+                          onChange={(e) => setPriceEditVal(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              savePrice(row)
+                            }
+
+                            if (e.key === 'Escape') setPriceEditId(null)
+                          }}
+                        />
+
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => savePrice(row)}
+                        >
+                          Simpan
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {row.price ? (
+                          priceFmt(row.price.price, row.price.currency)
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+
+                        <small className="sub">
+                          {cfgOf(row.category)?.priceUnit
+                            ? `/${cfgOf(row.category).priceUnit}`
+                            : ''}
+                          {row.price?.manual ? ' · manual' : ''}{' '}
+                          <button
+                            type="button"
+                            className="link"
+                            onClick={() => startPrice(row)}
+                          >
+                            ubah
+                          </button>
+                        </small>
+                      </>
+                    )}
+                  </td>
+
+                  <td className="r">
+                    {row.market !== null ? (
+                      rp(row.market)
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+
+                  <td className="r">
+                    {row.pnl !== null ? (
+                      <>
+                        <span className={tone(row.pnl)}>{signed(row.pnl)}</span>
+                        {row.pnlPct !== null && (
+                          <small className={`sub ${tone(row.pnl)}`}>
+                            {pctFmt(row.pnlPct)}
+                          </small>
+                        )}
+                      </>
+                    ) : (
+                      <span className="muted">—</span>
                     )}
                   </td>
 
@@ -675,7 +907,7 @@ export default function Dashboard() {
 
               {!rows.length && (
                 <tr>
-                  <td colSpan="6" className="muted">
+                  <td colSpan="9" className="muted">
                     Belum ada investasi.
                   </td>
                 </tr>
@@ -683,6 +915,22 @@ export default function Dashboard() {
             </tbody>
           </table>
         )}
+
+        {(priceInfo.failed || Object.keys(priceInfo.errors).length > 0) && (
+          <p className="err">
+            Sebagian harga gagal dimuat
+            {Object.keys(priceInfo.errors).length > 0 &&
+              ` (${Object.keys(priceInfo.errors).join(', ')})`}
+            . Coba perbarui, atau isi harga manual lewat tombol
+            &quot;ubah&quot;.
+          </p>
+        )}
+
+        <p className="muted note">
+          Harga dari Yahoo Finance dan CoinGecko, bisa tertunda. Emas memakai
+          harga spot internasional, jadi isi manual kalau Anda ingin harga Antam
+          atau Pegadaian. 1 lot saham ID dihitung 100 saham.
+        </p>
       </section>
 
       <ConfirmDialog dialog={dialog} onClose={() => setDialog(null)} />
