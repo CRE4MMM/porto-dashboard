@@ -75,7 +75,9 @@ const compactRp = (n) => {
 // "+Rp 450 rb" / "−Rp 1,2 jt" untuk label di ujung bar
 const signedShort = (n) => {
   const r = Math.round(n)
-  return (r > 0 ? '+' : r < 0 ? '−' : '') + 'Rp ' + compactFmt.format(Math.abs(r))
+  return (
+    (r > 0 ? '+' : r < 0 ? '−' : '') + 'Rp ' + compactFmt.format(Math.abs(r))
+  )
 }
 
 const dayShort = new Intl.DateTimeFormat('id-ID', {
@@ -139,7 +141,10 @@ const zeroOffset = (data, key) => {
 
 // Untuk tabel: kalau titiknya banyak, tampilkan per minggu (terbaru di atas).
 const sampleRows = (points) => {
-  const rows = points.length > 90 ? points.filter((_, i) => (points.length - 1 - i) % 7 === 0) : points
+  const rows =
+    points.length > 90
+      ? points.filter((_, i) => (points.length - 1 - i) % 7 === 0)
+      : points
 
   return { rows: [...rows].reverse(), sampled: points.length > 90 }
 }
@@ -369,7 +374,10 @@ function Keys({ items }) {
     <ul className="keys">
       {items.map((item) => (
         <li key={item.label}>
-          <i className={`key ${item.shape}`} style={{ background: item.color }} />
+          <i
+            className={`key ${item.shape}`}
+            style={{ background: item.color }}
+          />
           {item.label}
         </li>
       ))}
@@ -452,7 +460,10 @@ function ValueChart({ data }) {
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={data} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
+      <LineChart
+        data={data}
+        margin={{ top: 12, right: 16, bottom: 0, left: 0 }}
+      >
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis
           dataKey="t"
@@ -474,10 +485,7 @@ function ValueChart({ data }) {
           tick={TICK}
           domain={['auto', 'auto']}
         />
-        <Tooltip
-          cursor={CURSOR_LINE}
-          content={<ChartTip build={valueTip} />}
-        />
+        <Tooltip cursor={CURSOR_LINE} content={<ChartTip build={valueTip} />} />
         <Line
           type="stepAfter"
           dataKey="cost"
@@ -524,7 +532,10 @@ function TrendChart({ data }) {
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <AreaChart data={data} margin={{ top: 28, right: 56, bottom: 0, left: 0 }}>
+      <AreaChart
+        data={data}
+        margin={{ top: 28, right: 56, bottom: 0, left: 0 }}
+      >
         <defs>
           <linearGradient id="pnlFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset={offset} stopColor={POS} stopOpacity={0.12} />
@@ -557,10 +568,7 @@ function TrendChart({ data }) {
           tick={TICK}
         />
         <ReferenceLine y={0} stroke={AXIS} />
-        <Tooltip
-          cursor={CURSOR_LINE}
-          content={<ChartTip build={trendTip} />}
-        />
+        <Tooltip cursor={CURSOR_LINE} content={<ChartTip build={trendTip} />} />
         <Area
           type="monotone"
           dataKey="pnl"
@@ -678,7 +686,10 @@ function AssetChart({ data }) {
   // Lebar label nama aset menyesuaikan nama terpanjang (maks 140px).
   const labelWidth = Math.min(
     140,
-    Math.max(56, Math.max(...data.map((item) => String(item.symbol).length)) * 9 + 12)
+    Math.max(
+      56,
+      Math.max(...data.map((item) => String(item.symbol).length)) * 9 + 12
+    )
   )
 
   // Ruang di kiri/kanan bar untuk label nilai (px), hanya di sisi yang dipakai.
@@ -686,7 +697,10 @@ function AssetChart({ data }) {
   const hasPositive = data.some((item) => item.pnl > 0)
 
   return (
-    <ResponsiveContainer width="100%" height={Math.max(150, data.length * 44 + 16)}>
+    <ResponsiveContainer
+      width="100%"
+      height={Math.max(150, data.length * 44 + 16)}
+    >
       <BarChart
         data={data}
         layout="vertical"
@@ -806,7 +820,9 @@ export default function PnlPage() {
   }, [])
 
   const items = priceItems(list)
-  const priceKey = items.map((item) => `${item.source}:${item.symbol}`).join(',')
+  const priceKey = items
+    .map((item) => `${item.source}:${item.symbol}`)
+    .join(',')
 
   // Harga terkini
   useEffect(() => {
@@ -904,7 +920,7 @@ export default function PnlPage() {
       const key = symKey(row.symbol)
 
       if (!bySymbol.has(key)) {
-        bySymbol.set(key, { symbol: row.symbol, category: row.category, rows: [] })
+        bySymbol.set(key, { symbol: key, category: row.category, rows: [] })
       }
 
       bySymbol.get(key).rows.push(row)
@@ -930,7 +946,8 @@ export default function PnlPage() {
   const pricedAssets = assets.filter((asset) => asset.priced)
   const sortedAssets = [...pricedAssets].sort((a, b) => b.pnl - a.pnl)
   const best = sortedAssets[0]
-  const worst = sortedAssets.length > 1 ? sortedAssets[sortedAssets.length - 1] : null
+  const worst =
+    sortedAssets.length > 1 ? sortedAssets[sortedAssets.length - 1] : null
 
   // ----- Data grafik -----
   const points = history.points
@@ -1022,7 +1039,9 @@ export default function PnlPage() {
                 {change7 === null ? '—' : signed(change7)}
               </b>
               <small>
-                {change7 === null ? 'Riwayat belum cukup' : 'Dibanding 7 hari lalu'}
+                {change7 === null
+                  ? 'Riwayat belum cukup'
+                  : 'Dibanding 7 hari lalu'}
               </small>
             </div>
 
@@ -1191,7 +1210,9 @@ export default function PnlPage() {
                       label: 'Perubahan',
                       right: true,
                       render: (p) => (
-                        <span className={tone(p.change)}>{signed(p.change)}</span>
+                        <span className={tone(p.change)}>
+                          {signed(p.change)}
+                        </span>
                       ),
                     },
                     {
@@ -1232,7 +1253,9 @@ export default function PnlPage() {
             {sortedAssets.length ? (
               <AssetChart data={sortedAssets} />
             ) : (
-              <div className="chart-empty">Belum ada aset yang punya harga.</div>
+              <div className="chart-empty">
+                Belum ada aset yang punya harga.
+              </div>
             )}
 
             <div className="table-scroll">
@@ -1289,8 +1312,8 @@ export default function PnlPage() {
           {histFailed && (
             <p className="err">
               Sebagian riwayat harga gagal dimuat
-              {failedSymbols.length > 0 && ` (${failedSymbols.join(', ')})`}
-              . Aset itu tidak ikut dihitung di grafik.
+              {failedSymbols.length > 0 && ` (${failedSymbols.join(', ')})`}.
+              Aset itu tidak ikut dihitung di grafik.
             </p>
           )}
 

@@ -41,7 +41,8 @@ const COLORS = [
 const group = (list, key, field = 'value') =>
   Object.entries(
     list.reduce((acc, item) => {
-      const name = item[key]
+      // Nama aset digabung tanpa memandang huruf besar/kecil (mpmx = MPMX).
+      const name = key === 'symbol' ? symKey(item[key]) : item[key]
       acc[name] = (acc[name] || 0) + Number(item[field] || 0)
       return acc
     }, {})
@@ -292,11 +293,7 @@ export default function Dashboard() {
       })
     } catch (error) {
       console.error('Price load error:', error)
-      setPriceInfo((previous) => ({
-        ...previous,
-        loading: false,
-        failed: true,
-      }))
+      setPriceInfo((previous) => ({ ...previous, loading: false, failed: true }))
     }
   }
 
@@ -315,7 +312,7 @@ export default function Dashboard() {
       const response = await send(
         editId ? `/api/investments/${editId}` : '/api/investments',
         editId ? 'PUT' : 'POST',
-        form
+        { ...form, symbol: symKey(form.symbol) }
       )
 
       const data = await response.json()
@@ -510,7 +507,7 @@ export default function Dashboard() {
     persistManual(next)
     setPriceEditId(null)
   }
-  const assetCount = new Set(rows.map((row) => row.symbol)).size
+  const assetCount = new Set(rows.map((row) => symKey(row.symbol))).size
 
   const holdings = HOLDINGS.map((cfg) => {
     const items = group(
@@ -544,10 +541,7 @@ export default function Dashboard() {
               </span>
               <span className="muted"> · Modal {rp(totalCost)}</span>
               {unpriced > 0 && (
-                <span className="muted">
-                  {' '}
-                  · {unpriced} aset belum ada harga
-                </span>
+                <span className="muted"> · {unpriced} aset belum ada harga</span>
               )}
             </p>
           )}
@@ -657,9 +651,7 @@ export default function Dashboard() {
             min="0"
             step="any"
             placeholder={
-              unitOf(form.category)
-                ? `Jumlah (${unitOf(form.category)})`
-                : 'Jumlah'
+              unitOf(form.category) ? `Jumlah (${unitOf(form.category)})` : 'Jumlah'
             }
             value={form.lots}
             onChange={setField('lots')}
@@ -788,7 +780,7 @@ export default function Dashboard() {
               {rows.map((row) => (
                 <tr key={row.id}>
                   <td>
-                    <b>{row.symbol}</b>
+                    <b>{symKey(row.symbol)}</b>
                   </td>
 
                   <td>
@@ -898,7 +890,10 @@ export default function Dashboard() {
                     <button className="ghost" onClick={() => startEdit(row)}>
                       Edit
                     </button>{' '}
-                    <button className="ghost danger" onClick={() => del(row)}>
+                    <button
+                      className="ghost danger"
+                      onClick={() => del(row)}
+                    >
                       Hapus
                     </button>
                   </td>
@@ -921,15 +916,14 @@ export default function Dashboard() {
             Sebagian harga gagal dimuat
             {Object.keys(priceInfo.errors).length > 0 &&
               ` (${Object.keys(priceInfo.errors).join(', ')})`}
-            . Coba perbarui, atau isi harga manual lewat tombol
-            &quot;ubah&quot;.
+            . Coba perbarui, atau isi harga manual lewat tombol &quot;ubah&quot;.
           </p>
         )}
 
         <p className="muted note">
           Harga dari Yahoo Finance dan CoinGecko, bisa tertunda. Emas memakai
-          harga spot internasional, jadi isi manual kalau Anda ingin harga Antam
-          atau Pegadaian. 1 lot saham ID dihitung 100 saham.
+          harga spot internasional, jadi isi manual kalau Anda ingin harga
+          Antam atau Pegadaian. 1 lot saham ID dihitung 100 saham.
         </p>
       </section>
 
