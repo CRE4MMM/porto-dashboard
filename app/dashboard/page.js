@@ -571,16 +571,14 @@ export default function Dashboard() {
               <span className="num">{lotFmt(h.sum)}</span>
               <span className="unit">{h.unit}</span>
             </b>
-            <small
-              className="detail"
-              title={h.items
-                .map((item) => `${item.name} ${lotFmt(item.value)}`)
-                .join(', ')}
-            >
+            <small className="detail">
               {h.items.length
-                ? h.items
-                    .map((item) => `${item.name} ${lotFmt(item.value)}`)
-                    .join(' · ')
+                ? h.items.map((item) => (
+                    <span className="detail-row" key={item.name}>
+                      <span>{item.name}</span>
+                      <span>{lotFmt(item.value)}</span>
+                    </span>
+                  ))
                 : 'Belum ada'}
             </small>
           </div>

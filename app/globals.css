@@ -558,8 +558,9 @@ td .ghost {
 
 .stat b {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.4rem;
+  gap: 0 0.4rem;
   min-width: 0;
   font-family: var(--display);
   font-size: 1.4rem;
@@ -567,15 +568,13 @@ td .ghost {
   overflow-wrap: anywhere;
 }
 
-/* Angka tetap satu baris, dipotong "…" kalau terlalu panjang */
+/* Angka tidak dipotong: kalau kartu sempit, satuan turun ke baris bawah */
 .stat b .num {
   min-width: 0;
-  overflow: hidden;
   color: var(--ink);
   font-size: inherit;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* Satuan (lot, lembar, gram, coin) kecil dan pudar */
@@ -594,12 +593,33 @@ td .ghost {
   font-weight: 500;
 }
 
-/* Rincian per aset: satu baris, dipotong "…" (teks penuh lewat hover) */
+/* Rincian per aset: satu aset per baris, tersusun ke bawah (tidak dipotong) */
 .stat small.detail {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.15rem;
+}
+
+.stat small.detail .detail-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* Nama aset di kiri, jumlah di kanan; angka panjang boleh turun baris */
+.stat small.detail .detail-row span {
+  color: inherit;
+  font-size: inherit;
+  font-weight: 500;
+}
+
+.stat small.detail .detail-row span:last-child {
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .stat.rate div {
