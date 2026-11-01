@@ -25,6 +25,7 @@ import {
   pctFmt,
   tone,
   buildRows,
+  toCsv,
 } from '../../lib/portfolio'
 
 const COLORS = [
@@ -293,7 +294,11 @@ export default function Dashboard() {
       })
     } catch (error) {
       console.error('Price load error:', error)
-      setPriceInfo((previous) => ({ ...previous, loading: false, failed: true }))
+      setPriceInfo((previous) => ({
+        ...previous,
+        loading: false,
+        failed: true,
+      }))
     }
   }
 
@@ -479,6 +484,23 @@ export default function Dashboard() {
   const pnlTotalPct = pricedCost > 0 ? (pnlTotal / pricedCost) * 100 : null
   const unpriced = rows.length - priced.length
 
+  // Unduh seluruh investasi (beserta harga, nilai, dan PnL saat ini) sebagai CSV.
+  // BOM di depan supaya Excel membaca huruf dengan benar.
+  function exportCsv() {
+    const blob = new Blob(['\ufeff' + toCsv(rows)], {
+      type: 'text/csv;charset=utf-8',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = `portofolio-${new Date().toLocaleDateString('sv-SE')}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
   function startPrice(row) {
     const current = manual[symKey(row.symbol)]
 
@@ -541,7 +563,10 @@ export default function Dashboard() {
               </span>
               <span className="muted"> · Modal {rp(totalCost)}</span>
               {unpriced > 0 && (
-                <span className="muted"> · {unpriced} aset belum ada harga</span>
+                <span className="muted">
+                  {' '}
+                  · {unpriced} aset belum ada harga
+                </span>
               )}
             </p>
           )}
@@ -649,7 +674,9 @@ export default function Dashboard() {
             min="0"
             step="any"
             placeholder={
-              unitOf(form.category) ? `Jumlah (${unitOf(form.category)})` : 'Jumlah'
+              unitOf(form.category)
+                ? `Jumlah (${unitOf(form.category)})`
+                : 'Jumlah'
             }
             value={form.lots}
             onChange={setField('lots')}
@@ -752,6 +779,15 @@ export default function Dashboard() {
               disabled={priceInfo.loading}
             >
               {priceInfo.loading ? 'Memuat...' : 'Perbarui harga'}
+            </button>
+
+            <button
+              type="button"
+              className="ghost"
+              onClick={exportCsv}
+              disabled={!rows.length}
+            >
+              Ekspor CSV
             </button>
           </span>
         </h3>
@@ -888,10 +924,7 @@ export default function Dashboard() {
                     <button className="ghost" onClick={() => startEdit(row)}>
                       Edit
                     </button>{' '}
-                    <button
-                      className="ghost danger"
-                      onClick={() => del(row)}
-                    >
+                    <button className="ghost danger" onClick={() => del(row)}>
                       Hapus
                     </button>
                   </td>
@@ -914,14 +947,15 @@ export default function Dashboard() {
             Sebagian harga gagal dimuat
             {Object.keys(priceInfo.errors).length > 0 &&
               ` (${Object.keys(priceInfo.errors).join(', ')})`}
-            . Coba perbarui, atau isi harga manual lewat tombol &quot;ubah&quot;.
+            . Coba perbarui, atau isi harga manual lewat tombol
+            &quot;ubah&quot;.
           </p>
         )}
 
         <p className="muted note">
           Harga dari Yahoo Finance dan CoinGecko, bisa tertunda. Emas memakai
-          harga spot internasional, jadi isi manual kalau Anda ingin harga
-          Antam atau Pegadaian. 1 lot saham ID dihitung 100 saham.
+          harga spot internasional, jadi isi manual kalau Anda ingin harga Antam
+          atau Pegadaian. 1 lot saham ID dihitung 100 saham.
         </p>
       </section>
 

@@ -900,7 +900,9 @@ a.btn-link:hover {
 
 .price-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.6rem;
   font-family: var(--body);
   font-size: 0.8rem;
