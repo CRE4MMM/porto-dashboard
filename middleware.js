@@ -12,4 +12,6 @@ export async function middleware(req) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 }
-export const config = { matcher: ['/dashboard/:path*', '/pnl/:path*'] }
+export const config = {
+  matcher: ['/dashboard/:path*', '/pnl/:path*', '/transaksi/:path*'],
+}

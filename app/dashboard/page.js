@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -20,6 +20,8 @@ import {
   cfgOf,
   unitOf,
   symKey,
+  planImport,
+  buildHoldings,
   priceFmt,
   signed,
   pctFmt,
@@ -158,6 +160,138 @@ function ConfirmDialog({ dialog, onClose }) {
   )
 }
 
+function ImportDialog({ plan, onClose, onDone }) {
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState(null)
+
+  useEffect(() => {
+    if (!plan) return
+
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !busy) onClose()
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [plan, busy, onClose])
+
+  if (!plan) return null
+
+  const ok = plan.items.filter((item) => item.status === 'ok')
+  const dup = plan.items.filter((item) => item.status === 'duplicate')
+  const bad = plan.items.filter((item) => item.status === 'error')
+
+  async function run() {
+    setBusy(true)
+
+    let saved = 0
+    const failed = []
+
+    for (const item of ok) {
+      try {
+        const response = await send('/api/investments', 'POST', item.data)
+
+        if (response.ok) saved++
+        else failed.push(item.line)
+      } catch {
+        failed.push(item.line)
+      }
+    }
+
+    setResult({ saved, failed })
+    setBusy(false)
+    onDone()
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+      <div
+        className="modal modal-wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="import-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id="import-title">Impor CSV</h3>
+
+        {plan.fatal ? (
+          <p className="muted">{plan.fatal}</p>
+        ) : result ? (
+          <p className="muted">
+            {result.saved} investasi berhasil diimpor.
+            {result.failed.length > 0 &&
+              ` Gagal disimpan di baris: ${result.failed.join(', ')}.`}
+          </p>
+        ) : (
+          <>
+            <p className="muted">
+              {ok.length} baris akan diimpor
+              {dup.length > 0 && `, ${dup.length} dilewati karena sudah ada`}
+              {bad.length > 0 && `, ${bad.length} bermasalah`}. Tanggal dibuat
+              akan menjadi hari ini.
+            </p>
+
+            <div className="table-scroll import-list">
+              <table className="pnl-table">
+                <thead>
+                  <tr>
+                    <th>Baris</th>
+                    <th>Aset</th>
+                    <th>Jumlah</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plan.items.map((item) => (
+                    <tr key={item.line}>
+                      <td>{item.line}</td>
+                      <td>{item.data ? item.data.symbol : '—'}</td>
+                      <td>
+                        {item.data
+                          ? `${lotFmt(item.data.lots)} ${unitOf(item.data.category)}`
+                          : '—'}
+                      </td>
+                      <td
+                        className={
+                          item.status === 'ok'
+                            ? 'pos'
+                            : item.status === 'error'
+                              ? 'neg'
+                              : 'muted'
+                        }
+                      >
+                        {item.status === 'ok' ? 'Akan diimpor' : item.reason}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="ghost"
+            autoFocus
+            onClick={onClose}
+            disabled={busy}
+          >
+            {result || plan.fatal ? 'Tutup' : 'Batal'}
+          </button>
+
+          {!result && !plan.fatal && (
+            <button type="button" onClick={run} disabled={busy || !ok.length}>
+              {busy ? 'Mengimpor...' : `Impor ${ok.length} baris`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const empty = {
   symbol: '',
   category: '',
@@ -174,7 +308,6 @@ export default function Dashboard() {
   const [rate, setRate] = useState(16000)
   const [rateInfo, setRateInfo] = useState({ date: null, stale: false })
   const [form, setForm] = useState(empty)
-  const [editId, setEditId] = useState(null)
 
   const [err, setErr] = useState('')
   const [catName, setCatName] = useState('')
@@ -182,6 +315,8 @@ export default function Dashboard() {
   const [showCatForm, setShowCatForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [dialog, setDialog] = useState(null)
+  const [importPlan, setImportPlan] = useState(null)
+  const fileInput = useRef(null)
 
   const [prices, setPrices] = useState({})
   const [priceInfo, setPriceInfo] = useState({
@@ -314,11 +449,10 @@ export default function Dashboard() {
     setErr('')
 
     try {
-      const response = await send(
-        editId ? `/api/investments/${editId}` : '/api/investments',
-        editId ? 'PUT' : 'POST',
-        { ...form, symbol: symKey(form.symbol) }
-      )
+      const response = await send('/api/investments', 'POST', {
+        ...form,
+        symbol: symKey(form.symbol),
+      })
 
       const data = await response.json()
 
@@ -328,7 +462,6 @@ export default function Dashboard() {
       }
 
       setForm(empty)
-      setEditId(null)
       await load()
     } catch (error) {
       console.error('Save investment error:', error)
@@ -336,30 +469,36 @@ export default function Dashboard() {
     }
   }
 
-  function del(investment) {
+  function del(holding) {
+    const n = holding.ids.length
+
     setDialog({
-      title: 'Hapus investasi?',
-      message: `Investasi ${investment.symbol} akan dihapus permanen dan tidak bisa dikembalikan.`,
+      title: `Hapus ${holding.symbol}?`,
+      message:
+        n > 1
+          ? `Seluruh ${n} catatan transaksi ${holding.symbol} akan dihapus permanen dan tidak bisa dikembalikan. Untuk menghapus satu catatan saja, buka halaman Transaksi.`
+          : `Catatan ${holding.symbol} akan dihapus permanen dan tidak bisa dikembalikan.`,
       confirmLabel: 'Hapus',
       danger: true,
-      onConfirm: () => doDelete(investment.id),
+      onConfirm: () => doDelete(holding.ids),
     })
   }
 
-  async function doDelete(id) {
+  async function doDelete(ids) {
     setErr('')
 
     try {
-      const response = await fetch(`/api/investments/${id}`, {
-        method: 'DELETE',
-      })
+      let failed = 0
 
-      const data = await response.json().catch(() => ({}))
+      for (const id of ids) {
+        const response = await fetch(`/api/investments/${id}`, {
+          method: 'DELETE',
+        })
 
-      if (!response.ok) {
-        setErr(data.error || 'Gagal menghapus investasi.')
-        return
+        if (!response.ok) failed++
       }
+
+      if (failed) setErr(`${failed} catatan gagal dihapus. Coba lagi.`)
 
       await load()
     } catch (error) {
@@ -450,39 +589,19 @@ export default function Dashboard() {
     router.refresh()
   }
 
-  function startEdit(investment) {
-    setEditId(investment.id)
-    setForm({
-      symbol: investment.symbol,
-      category: investment.category,
-      currency: investment.currency || 'IDR',
-      lots: String(investment.lots),
-      amount: String(investment.amount),
-    })
-
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    })
-  }
-
-  function cancelEdit() {
-    setEditId(null)
-    setForm(empty)
-    setErr('')
-  }
-
   const setField = (key) => (e) => setForm({ ...form, [key]: e.target.value })
 
   const rows = buildRows({ list, rate, prices, manual })
+  const active = buildHoldings(rows, rate)
 
-  const total = rows.reduce((sum, row) => sum + row.value, 0)
-  const totalCost = rows.reduce((sum, row) => sum + row.cost, 0)
-  const priced = rows.filter((row) => row.market !== null)
+  // Kartu ringkasan, donat, dan tabel sama-sama dihitung dari kepemilikan aktif.
+  const total = active.reduce((sum, row) => sum + row.value, 0)
+  const totalCost = active.reduce((sum, row) => sum + row.cost, 0)
+  const priced = active.filter((row) => row.market !== null)
   const pnlTotal = priced.reduce((sum, row) => sum + row.pnl, 0)
   const pricedCost = priced.reduce((sum, row) => sum + row.cost, 0)
   const pnlTotalPct = pricedCost > 0 ? (pnlTotal / pricedCost) * 100 : null
-  const unpriced = rows.length - priced.length
+  const unpriced = active.length - priced.length
 
   // Unduh seluruh investasi (beserta harga, nilai, dan PnL saat ini) sebagai CSV.
   // BOM di depan supaya Excel membaca huruf dengan benar.
@@ -501,10 +620,34 @@ export default function Dashboard() {
     URL.revokeObjectURL(url)
   }
 
+  // Membaca file CSV yang dipilih lalu menampilkan pratinjau sebelum disimpan.
+  async function pickCsv(e) {
+    const file = e.target.files?.[0]
+
+    e.target.value = ''
+
+    if (!file) return
+
+    if (file.size > 2 * 1024 * 1024) {
+      setImportPlan({
+        items: [],
+        fatal: 'Ukuran file terlalu besar (maksimal 2 MB).',
+      })
+      return
+    }
+
+    setImportPlan(
+      planImport(await file.text(), {
+        categories: cats.map((category) => category.name),
+        existing: list,
+      })
+    )
+  }
+
   function startPrice(row) {
     const current = manual[symKey(row.symbol)]
 
-    setPriceEditId(row.id)
+    setPriceEditId(row.key)
     setPriceEditVal(current ? String(current.price) : '')
   }
 
@@ -529,11 +672,11 @@ export default function Dashboard() {
     persistManual(next)
     setPriceEditId(null)
   }
-  const assetCount = new Set(rows.map((row) => symKey(row.symbol))).size
+  const assetCount = active.length
 
   const holdings = HOLDINGS.map((cfg) => {
     const items = group(
-      rows.filter((row) => norm(row.category) === norm(cfg.category)),
+      active.filter((row) => norm(row.category) === norm(cfg.category)),
       'symbol',
       'lots'
     )
@@ -573,6 +716,10 @@ export default function Dashboard() {
         </div>
 
         <div className="header-actions">
+          <Link href="/transaksi" className="btn-link">
+            Transaksi
+          </Link>
+
           <Link href="/pnl" className="btn-link">
             PnL
           </Link>
@@ -623,13 +770,13 @@ export default function Dashboard() {
       </section>
 
       <div className="grid">
-        <Chart title="Berdasarkan aset" data={group(rows, 'symbol')} />
+        <Chart title="Berdasarkan aset" data={group(active, 'symbol')} />
 
-        <Chart title="Berdasarkan kategori" data={group(rows, 'category')} />
+        <Chart title="Berdasarkan kategori" data={group(active, 'category')} />
       </div>
 
       <section className="card">
-        <h3>{editId ? 'Edit investasi' : 'Tambah investasi'}</h3>
+        <h3>Tambah investasi</h3>
 
         <form onSubmit={save} className="row">
           <input
@@ -693,15 +840,24 @@ export default function Dashboard() {
             required
           />
 
-          <button type="submit">
-            {editId ? 'Simpan perubahan' : 'Tambah investasi'}
+          <button type="submit">Tambah investasi</button>
+
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => fileInput.current?.click()}
+            disabled={!cats.length}
+          >
+            Impor CSV
           </button>
 
-          {editId && (
-            <button type="button" className="ghost" onClick={cancelEdit}>
-              Batal edit
-            </button>
-          )}
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            onChange={pickCsv}
+          />
         </form>
 
         {err && <p className="err">{err}</p>}
@@ -760,7 +916,7 @@ export default function Dashboard() {
 
       <section className="card">
         <h3>
-          Daftar investasi
+          Kepemilikan aktif
           <span className="price-meta">
             {priceInfo.at && (
               <small className="muted">
@@ -811,8 +967,8 @@ export default function Dashboard() {
             </thead>
 
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
+              {active.map((row) => (
+                <tr key={row.key}>
                   <td>
                     <b>{symKey(row.symbol)}</b>
                   </td>
@@ -828,15 +984,10 @@ export default function Dashboard() {
                     )}
                   </td>
 
-                  <td className="r">
-                    {money(row.amount, row.currency)}
-                    {row.currency === 'USD' && (
-                      <small className="sub">≈ {rp(row.cost)}</small>
-                    )}
-                  </td>
+                  <td className="r">{rp(row.cost)}</td>
 
                   <td className="r">
-                    {priceEditId === row.id ? (
+                    {priceEditId === row.key ? (
                       <div className="price-edit">
                         <input
                           type="number"
@@ -921,7 +1072,14 @@ export default function Dashboard() {
                   </td>
 
                   <td className="r">
-                    <button className="ghost" onClick={() => startEdit(row)}>
+                    <button
+                      className="ghost"
+                      onClick={() =>
+                        router.push(
+                          `/transaksi?aset=${encodeURIComponent(row.symbol)}`
+                        )
+                      }
+                    >
                       Edit
                     </button>{' '}
                     <button className="ghost danger" onClick={() => del(row)}>
@@ -931,10 +1089,10 @@ export default function Dashboard() {
                 </tr>
               ))}
 
-              {!rows.length && (
+              {!active.length && (
                 <tr>
                   <td colSpan="9" className="muted">
-                    Belum ada investasi.
+                    Belum ada aset yang dipegang.
                   </td>
                 </tr>
               )}
@@ -955,11 +1113,19 @@ export default function Dashboard() {
         <p className="muted note">
           Harga dari Yahoo Finance dan CoinGecko, bisa tertunda. Emas memakai
           harga spot internasional, jadi isi manual kalau Anda ingin harga Antam
-          atau Pegadaian. 1 lot saham ID dihitung 100 saham.
+          atau Pegadaian. 1 lot saham ID dihitung 100 saham. Modal dan jumlah
+          adalah gabungan semua transaksi aset yang sama; rinciannya ada di
+          halaman Transaksi.
         </p>
       </section>
 
       <ConfirmDialog dialog={dialog} onClose={() => setDialog(null)} />
+      <ImportDialog
+        key={importPlan ? 'open' : 'closed'}
+        plan={importPlan}
+        onClose={() => setImportPlan(null)}
+        onDone={load}
+      />
     </main>
   )
 }

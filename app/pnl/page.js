@@ -1091,7 +1091,7 @@ export default function PnlPage() {
           </div>
 
           <ChartCard
-            title="Nilai vs modal"
+            title="Nilai vs Modal"
             summary={valueSummary(points)}
             busy={busy}
             keys={
