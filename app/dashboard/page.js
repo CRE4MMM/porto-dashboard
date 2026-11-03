@@ -22,6 +22,7 @@ import {
   symKey,
   planImport,
   buildHoldings,
+  buildRealized,
   priceFmt,
   signed,
   pctFmt,
@@ -160,6 +161,161 @@ function ConfirmDialog({ dialog, onClose }) {
   )
 }
 
+function SellDialog({ holding, rate, onClose, onDone }) {
+  const cfg = cfgOf(holding.category)
+  const [lots, setLots] = useState('')
+  const [amount, setAmount] = useState('')
+  const [currency, setCurrency] = useState(
+    holding.price?.currency || cfg?.priceCurrency || 'IDR'
+  )
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !busy) onClose()
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy, onClose])
+
+  const unit = unitOf(holding.category)
+  const n = Number(lots)
+  const proceeds = Number(amount) * (currency === 'USD' ? rate : 1)
+  const valid =
+    n > 0 && n <= holding.lots + 1e-8 && amount !== '' && Number(amount) >= 0
+  // Perkiraan untung/rugi terealisasi: hasil jual dikurangi modal rata-rata.
+  const costOut =
+    holding.lots > 0 ? holding.cost * Math.min(1, n / holding.lots) : 0
+  const realized = valid ? proceeds - costOut : null
+
+  async function submit(e) {
+    e.preventDefault()
+    setErr('')
+    setBusy(true)
+
+    try {
+      const response = await send('/api/investments', 'POST', {
+        type: 'SELL',
+        symbol: holding.symbol,
+        category: holding.category,
+        currency,
+        lots: lots,
+        amount: amount,
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        setErr(data.error || 'Gagal mencatat penjualan.')
+        return
+      }
+
+      await onDone()
+    } catch (error) {
+      console.error('Sell error:', error)
+      setErr('Terjadi kesalahan saat mencatat penjualan.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+      <form
+        className="modal modal-wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sell-title"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+      >
+        <h3 id="sell-title">Jual {holding.symbol}</h3>
+        <p className="muted">
+          Dimiliki {lotFmt(holding.lots)} {unit}. Modal rata-rata{' '}
+          {rp(holding.cost / holding.lots)} per {unit}.
+        </p>
+
+        <div className="field-grid">
+          <label>
+            <span>Jumlah dijual{unit ? ` (${unit})` : ''}</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              autoFocus
+              value={lots}
+              onChange={(e) => setLots(e.target.value)}
+              required
+            />
+          </label>
+
+          <label>
+            <span>Mata uang hasil jual</span>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+            >
+              <option value="IDR">IDR (Rp)</option>
+              <option value="USD">USD ($)</option>
+            </select>
+          </label>
+
+          <label className="wide">
+            <span>Total hasil jual ({currency})</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+            />
+          </label>
+        </div>
+
+        <p className="sell-line">
+          <button
+            type="button"
+            className="link"
+            onClick={() => setLots(String(holding.lots))}
+          >
+            Jual semua
+          </button>
+          {realized !== null && (
+            <span className={tone(realized)}>
+              {' '}
+              Perkiraan {realized >= 0 ? 'untung' : 'rugi'} terealisasi{' '}
+              {signed(realized)}
+            </span>
+          )}
+        </p>
+
+        {n > holding.lots + 1e-8 && (
+          <p className="err">Jumlah melebihi yang dimiliki.</p>
+        )}
+
+        {err && <p className="err">{err}</p>}
+
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="ghost"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Batal
+          </button>
+
+          <button type="submit" disabled={busy || !valid}>
+            {busy ? 'Menyimpan...' : 'Catat penjualan'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 function ImportDialog({ plan, onClose, onDone }) {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
@@ -177,7 +333,10 @@ function ImportDialog({ plan, onClose, onDone }) {
 
   if (!plan) return null
 
-  const ok = plan.items.filter((item) => item.status === 'ok')
+  // BELI diproses lebih dulu supaya JUAL tidak ditolak karena stok belum ada.
+  const ok = plan.items
+    .filter((item) => item.status === 'ok')
+    .sort((a, b) => (a.data.type === 'SELL') - (b.data.type === 'SELL'))
   const dup = plan.items.filter((item) => item.status === 'duplicate')
   const bad = plan.items.filter((item) => item.status === 'error')
 
@@ -292,6 +451,9 @@ function ImportDialog({ plan, onClose, onDone }) {
   )
 }
 
+// Kategori yang kartunya tidak menampilkan angka total (hanya rincian per aset).
+const HIDE_CATEGORY_TOTAL = new Set(['id stocks', 'us etf', 'gold', 'crypto'])
+
 const empty = {
   symbol: '',
   category: '',
@@ -316,6 +478,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [dialog, setDialog] = useState(null)
   const [importPlan, setImportPlan] = useState(null)
+  const [sellTarget, setSellTarget] = useState(null)
   const fileInput = useRef(null)
 
   const [prices, setPrices] = useState({})
@@ -490,7 +653,8 @@ export default function Dashboard() {
     try {
       let failed = 0
 
-      for (const id of ids) {
+      // Terbaru dulu, supaya catatan jual terhapus sebelum catatan beli.
+      for (const id of [...ids].reverse()) {
         const response = await fetch(`/api/investments/${id}`, {
           method: 'DELETE',
         })
@@ -593,6 +757,7 @@ export default function Dashboard() {
 
   const rows = buildRows({ list, rate, prices, manual })
   const active = buildHoldings(rows, rate)
+  const realized = buildRealized(rows)
 
   // Kartu ringkasan, donat, dan tabel sama-sama dihitung dari kepemilikan aktif.
   const total = active.reduce((sum, row) => sum + row.value, 0)
@@ -713,6 +878,15 @@ export default function Dashboard() {
               )}
             </p>
           )}
+
+          {realized.count > 0 && (
+            <p className="pnl">
+              <span className="muted">Terealisasi dari penjualan </span>
+              <span className={tone(realized.total)}>
+                {signed(realized.total)}
+              </span>
+            </p>
+          )}
         </div>
 
         <div className="header-actions">
@@ -736,25 +910,35 @@ export default function Dashboard() {
           <b>{assetCount}</b>
         </div>
 
-        {holdings.map((h) => (
-          <div className="stat" key={h.category}>
-            <span>{h.label}</span>
-            <b>
-              <span className="num">{lotFmt(h.sum)}</span>
-              <span className="unit">{h.unit}</span>
-            </b>
-            <small className="detail">
-              {h.items.length
-                ? h.items.map((item) => (
-                    <span className="detail-row" key={item.name}>
-                      <span>{item.name}</span>
-                      <span>{lotFmt(item.value)}</span>
-                    </span>
-                  ))
-                : 'Belum ada'}
-            </small>
-          </div>
-        ))}
+        {holdings.map((h) => {
+          // Kartu ini hanya menampilkan rincian per aset (tanpa angka total).
+          const totalHidden = HIDE_CATEGORY_TOTAL.has(norm(h.category))
+
+          return (
+            <div className="stat" key={h.category}>
+              <span>{h.label}</span>
+              {!totalHidden && (
+                <b>
+                  <span className="num">{lotFmt(h.sum)}</span>
+                  <span className="unit">{h.unit}</span>
+                </b>
+              )}
+              <small className="detail">
+                {h.items.length
+                  ? h.items.map((item) => (
+                      <span className="detail-row" key={item.name}>
+                        <span>{item.name}</span>
+                        <span>
+                          {lotFmt(item.value)}
+                          {totalHidden && ` ${h.unit}`}
+                        </span>
+                      </span>
+                    ))
+                  : 'Belum ada'}
+              </small>
+            </div>
+          )
+        })}
 
         <div className="stat">
           <span>Kurs USD/IDR</span>
@@ -1074,6 +1258,12 @@ export default function Dashboard() {
                   <td className="r">
                     <button
                       className="ghost"
+                      onClick={() => setSellTarget(row)}
+                    >
+                      Jual
+                    </button>{' '}
+                    <button
+                      className="ghost"
                       onClick={() =>
                         router.push(
                           `/transaksi?aset=${encodeURIComponent(row.symbol)}`
@@ -1120,6 +1310,18 @@ export default function Dashboard() {
       </section>
 
       <ConfirmDialog dialog={dialog} onClose={() => setDialog(null)} />
+      {sellTarget && (
+        <SellDialog
+          key={sellTarget.key}
+          holding={sellTarget}
+          rate={rate}
+          onClose={() => setSellTarget(null)}
+          onDone={async () => {
+            setSellTarget(null)
+            await load()
+          }}
+        />
+      )}
       <ImportDialog
         key={importPlan ? 'open' : 'closed'}
         plan={importPlan}
